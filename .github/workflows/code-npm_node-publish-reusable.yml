@@ -1,0 +1,51 @@
+---
+name: code-npm-publish-reusable
+
+on:
+  workflow_call:
+    inputs:
+      artifact-name:
+        description: "Name of the artifact containing the .tgz packages"
+        required: true
+        type: string
+      tag:
+        description: "npm dist-tag to publish under (e.g. latest, next)"
+        required: false
+        type: string
+        default: latest
+    secrets:
+      NPM_TOKEN:
+        description: "npm access token — not required when OIDC Trusted Publishers is configured"
+        required: false
+
+# Required for npm OIDC Trusted Publishers.
+# This workflow must be registered in npmjs.com under each package's
+# "Trusted Publishers" settings so that OIDC-based authentication works.
+permissions:
+  id-token: write # Required for OIDC
+  contents: read
+
+jobs:
+  publish:
+    name: Publish to NPM
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download packages artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: /tmp/npm-packages
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.17.1"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: NPM / Publish packages
+        run: |
+          for tarball in /tmp/npm-packages/*.tgz; do
+            npm publish "$tarball" --provenance --access public --tag "${{ inputs.tag }}"
+          done
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

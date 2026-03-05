@@ -8,11 +8,11 @@ on:
   issue_comment:
     types: [created]
 
-# permissions:
-#   id-token: write # Required for OIDC
+permissions:
+  id-token: write # Required for npm OIDC Trusted Publishers
 
 jobs:
-  publish-snapshot:
+  prepare:
     name: Publish Snapshot
     if: >
       github.event.issue.pull_request != null &&
@@ -20,6 +20,8 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       ASDF_BRANCH_VERSION: 0.18.0
+    outputs:
+      snapshot_version: ${{ steps.define-snapshot-version.outputs.snapshot_version }}
     steps:
       - name: Validate admin permissions
         id: permission-check
@@ -132,6 +134,7 @@ jobs:
           tag-prefix: ""
 
       - name: Define snapshot version
+        id: define-snapshot-version
         working-directory: code
         env:
           RELEASE_VERSION: ${{ steps.update-changelog.outputs.version }}
@@ -139,6 +142,7 @@ jobs:
           CLEAN_VERSION=$(echo "$RELEASE_VERSION" | sed -E 's/-.*$//')
           PRE_RELEASE_VERSION="${CLEAN_VERSION}-SNAPSHOT.${{ github.run_number }}.${{ github.run_attempt }}"
           echo "SNAPSHOT_VERSION=$PRE_RELEASE_VERSION" >> "$GITHUB_ENV"
+          echo "snapshot_version=$PRE_RELEASE_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: NPM / Prepare snapshot
         working-directory: code
@@ -148,20 +152,42 @@ jobs:
           npm run version:release
           npm run release:prepare
 
-      - name: NPM / Publish Snapshot - Distribution Platform
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: NPM / Pack packages
         working-directory: code
         run: |
-          npm run publish:snapshot
+          mkdir -p /tmp/npm-packages
+          npm pack --workspaces --pack-destination /tmp/npm-packages
 
+      - name: Upload packages artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-snapshot-packages-${{ github.run_id }}
+          path: /tmp/npm-packages/*.tgz
+          retention-days: 1
+
+  publish:
+    name: Publish to NPM
+    needs: prepare
+    uses: ./.github/workflows/code-npm_node-publish-reusable.yml
+    with:
+      artifact-name: npm-snapshot-packages-${{ github.run_id }}
+      tag: next
+    secrets:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  notify:
+    name: Notify PR
+    needs: [prepare, publish]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
       - name: Result / Comment on PR
-        if: always()
         uses: actions/github-script@v7
+        env:
+          SNAPSHOT_VERSION: ${{ needs.prepare.outputs.snapshot_version }}
         with:
           script: |
-            const status = '${{ job.status }}';
+            const status = '${{ needs.publish.result }}';
 
             const body = status === 'success'
               ? [
