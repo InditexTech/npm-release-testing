@@ -18,6 +18,8 @@ jobs:
       github.event.issue.pull_request != null &&
       github.event.comment.body == '/publish-snapshot'
     runs-on: ubuntu-24.04
+    env:
+      ASDF_BRANCH_VERSION: 0.18.0
     steps:
       - name: Validate admin permissions
         id: permission-check
@@ -54,25 +56,51 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      # [ADAPTADO] Reemplaza el bloque de asdf (cache + install) por actions/setup-node.
-      # El registry-url configura .npmrc automaticamente; NODE_AUTH_TOKEN lo usa npm al publicar.
-      - name: NPM / Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
-
       - name: NPM / Setup Dependencies Cache
         uses: actions/cache@v4
         with:
           path: ~/.npm
-          # [ADAPTADO] package-lock.json en raiz (weavejs: code/package-lock.json)
-          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+          key: ${{ runner.os }}-node-${{ hashFiles('code/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-node-
 
+      - name: Setup asdf Cache
+        id: asdf-cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: ~/.asdf
+          key: ${{ runner.os }}-asdf-${{ env.ASDF_BRANCH_VERSION }}-${{ hashFiles('code/.tool-versions') }}
+
+      - name: Save tool-versions content
+        run: |
+          {
+            echo "TOOL_VERSIONS<<EOF"
+            cat code/.tool-versions
+            echo "EOF"
+          } >> "$GITHUB_ENV"
+
+      - name: Setup asdf environment
+        uses: asdf-vm/actions/install@1902764435ca0dd2f3388eea723a4f92a4eb8302 # v4.0.0
+        # https://github.com/asdf-vm/actions/issues/356
+        if: steps.asdf-cache.outputs.cache-hit != 'true'
+        with:
+          tool_versions: ${{ env.TOOL_VERSIONS }}
+          asdf_version: ${{ env.ASDF_BRANCH_VERSION }}
+
+      - name: NPM / Set npmrc
+        env:
+          NPM_AUTH: ${{ secrets.NPM_TOKEN }}
+          NPM_REGISTRY: "https://registry.npmjs.org/"
+        run: |
+          echo "registry=${NPM_REGISTRY}" >> /home/runner/.npmrc
+          echo "@inditextech:registry=${NPM_REGISTRY}" >> /home/runner/.npmrc
+          echo "//registry.npmjs.org/:_authToken=${NPM_AUTH}" >> /home/runner/.npmrc
+          echo "always-auth=true" >> /home/runner/.npmrc
+
       - name: NPM / Create Cache Folders
-        run: mkdir -p "$HOME"/.npm
+        run: |
+          mkdir -p "$HOME"/.npm
 
       - name: Setup patch release type version
         if: contains(env.RELEASE_LABELS, 'release-type/hotfix')
@@ -92,19 +120,19 @@ jobs:
         if: contains(env.RELEASE_LABELS, 'release-type/major')
         run: echo "RELEASE_VERSION=major" >> "$GITHUB_ENV"
 
-      # [ADAPTADO] changelog: apunta a la raiz (weavejs: code/CHANGELOG.md)
       - name: Update CHANGELOG.md
         id: update-changelog
         uses: release-flow/keep-a-changelog-action@v3.0.0
         with:
           command: bump
           version: ${{ env.RELEASE_VERSION }}
-          changelog: CHANGELOG.md
+          changelog: code/CHANGELOG.md
           fail-on-empty-release-notes: false
           keep-unreleased-section: true
           tag-prefix: ""
 
       - name: Define snapshot version
+        working-directory: code
         env:
           RELEASE_VERSION: ${{ steps.update-changelog.outputs.version }}
         run: |
@@ -112,23 +140,21 @@ jobs:
           PRE_RELEASE_VERSION="${CLEAN_VERSION}-SNAPSHOT.${{ github.run_number }}.${{ github.run_attempt }}"
           echo "SNAPSHOT_VERSION=$PRE_RELEASE_VERSION" >> "$GITHUB_ENV"
 
-      # [ADAPTADO] Reemplaza: npm run version:release && npm run release:prepare
-      # Usa npm version directamente para actualizar package.json sin crear un tag de git.
       - name: NPM / Prepare snapshot
+        working-directory: code
         env:
           RELEASE_VERSION: ${{ env.SNAPSHOT_VERSION }}
-        run: npm version "$RELEASE_VERSION" --no-git-tag-version --allow-same-version
+        run: |
+          npm run version:release
+          npm run release:prepare
 
-      # [ADAPTADO] Paso nuevo: instala dependencias antes de publicar (weavejs lo hace en release:prepare)
-      - name: NPM / Install dependencies
-        run: npm ci
-
-      # [ADAPTADO] Reemplaza: npm run publish:snapshot
-      # NODE_AUTH_TOKEN es leido automaticamente por npm gracias al registry-url de setup-node.
       - name: NPM / Publish Snapshot - Distribution Platform
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --tag next
+        working-directory: code
+        run: |
+          npm run publish:snapshot
 
       - name: Result / Comment on PR
         if: always()
