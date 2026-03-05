@@ -1,0 +1,158 @@
+---
+name: code-npm-publish-snapshot
+run-name: "Publish snapshot: ${{ github.event.issue.title }}"
+
+concurrency: code-publish-snapshot-${{ github.ref }}
+
+on:
+  issue_comment:
+    types: [created]
+
+# permissions:
+#   id-token: write # Required for OIDC
+
+jobs:
+  publish-snapshot:
+    name: Publish Snapshot
+    if: >
+      github.event.issue.pull_request != null &&
+      github.event.comment.body == '/publish-snapshot'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Validate admin permissions
+        id: permission-check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              username: context.actor
+            });
+
+            const permission = data.permission;
+            core.info(`User permission level: ${permission}`);
+
+            if (permission !== 'admin') {
+              core.setFailed(`User @${context.actor} is not a repository admin.`);
+            }
+
+      - name: Get input parameters
+        run: |
+          RELEASE_LABELS="${{ join(github.event.issue.labels.*.name, ', ') }}"
+          if [[ $RELEASE_LABELS != *release-type/* ]]; then
+            RELEASE_LABELS="$RELEASE_LABELS, release-type/minor"
+          fi
+          echo "RELEASE_LABELS=$RELEASE_LABELS" >> "$GITHUB_ENV"
+          BASELINE_BRANCH=${{ github.ref }}
+          echo "BASELINE_BRANCH=${BASELINE_BRANCH#refs/heads/}" >> "$GITHUB_ENV"
+
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: refs/pull/${{ github.event.issue.number }}/head
+          fetch-depth: 0
+          persist-credentials: false
+
+      # [ADAPTADO] Reemplaza el bloque de asdf (cache + install) por actions/setup-node.
+      # El registry-url configura .npmrc automaticamente; NODE_AUTH_TOKEN lo usa npm al publicar.
+      - name: NPM / Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: NPM / Setup Dependencies Cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          # [ADAPTADO] package-lock.json en raiz (weavejs: code/package-lock.json)
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: NPM / Create Cache Folders
+        run: mkdir -p "$HOME"/.npm
+
+      - name: Setup patch release type version
+        if: contains(env.RELEASE_LABELS, 'release-type/hotfix')
+          || contains(env.RELEASE_LABELS, 'release-type/multi-hotfix')
+          || contains(env.RELEASE_LABELS, 'release-type/patch')
+        run: echo "RELEASE_VERSION=patch" >> "$GITHUB_ENV"
+
+      - name: Setup minor release type version
+        if: contains(env.RELEASE_LABELS, 'release-type/minor')
+        run: echo "RELEASE_VERSION=minor" >> "$GITHUB_ENV"
+
+      - name: Setup minor release type version when no label set and TBD
+        if: ${{ !contains(env.RELEASE_LABELS, 'release-type') && vars.DEVELOPMENT_FLOW == 'trunk-based-development' }}
+        run: echo "RELEASE_VERSION=minor" >> "$GITHUB_ENV"
+
+      - name: Setup major release type version
+        if: contains(env.RELEASE_LABELS, 'release-type/major')
+        run: echo "RELEASE_VERSION=major" >> "$GITHUB_ENV"
+
+      # [ADAPTADO] changelog: apunta a la raiz (weavejs: code/CHANGELOG.md)
+      - name: Update CHANGELOG.md
+        id: update-changelog
+        uses: release-flow/keep-a-changelog-action@v3.0.0
+        with:
+          command: bump
+          version: ${{ env.RELEASE_VERSION }}
+          changelog: CHANGELOG.md
+          fail-on-empty-release-notes: false
+          keep-unreleased-section: true
+          tag-prefix: ""
+
+      - name: Define snapshot version
+        env:
+          RELEASE_VERSION: ${{ steps.update-changelog.outputs.version }}
+        run: |
+          CLEAN_VERSION=$(echo "$RELEASE_VERSION" | sed -E 's/-.*$//')
+          PRE_RELEASE_VERSION="${CLEAN_VERSION}-SNAPSHOT.${{ github.run_number }}.${{ github.run_attempt }}"
+          echo "SNAPSHOT_VERSION=$PRE_RELEASE_VERSION" >> "$GITHUB_ENV"
+
+      # [ADAPTADO] Reemplaza: npm run version:release && npm run release:prepare
+      # Usa npm version directamente para actualizar package.json sin crear un tag de git.
+      - name: NPM / Prepare snapshot
+        env:
+          RELEASE_VERSION: ${{ env.SNAPSHOT_VERSION }}
+        run: npm version "$RELEASE_VERSION" --no-git-tag-version --allow-same-version
+
+      # [ADAPTADO] Paso nuevo: instala dependencias antes de publicar (weavejs lo hace en release:prepare)
+      - name: NPM / Install dependencies
+        run: npm ci
+
+      # [ADAPTADO] Reemplaza: npm run publish:snapshot
+      # NODE_AUTH_TOKEN es leido automaticamente por npm gracias al registry-url de setup-node.
+      - name: NPM / Publish Snapshot - Distribution Platform
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --tag next
+
+      - name: Result / Comment on PR
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const status = '${{ job.status }}';
+
+            const body = status === 'success'
+              ? [
+                  "✅ Pre-release published successfully.",
+                  "",
+                  `- Version: \`${process.env.SNAPSHOT_VERSION}\``,
+                  "- Tag: `next`"
+                ]
+              : [
+                  "❌ Pre-release publish failed.",
+                  "",
+                  "Please check the workflow logs for details."
+                ]
+
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body.join("\n")
+            });
