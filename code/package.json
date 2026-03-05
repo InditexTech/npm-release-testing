@@ -1,0 +1,30 @@
+{
+  "name": "@inditextech/release-test",
+  "version": "1.0.0-SNAPSHOT",
+  "description": "Minimal monorepo to test the weavejs release workflows",
+  "packageManager": "npm@10.2.4",
+  "workspaces": [
+    "packages/*"
+  ],
+  "type": "module",
+  "scripts": {
+    "build": "nx run-many -t build",
+    "publish:snapshot": "nx run-many -t publish:snapshot -- --verbose --unsafe-perm",
+    "release:perform": "nx run-many -t release:perform -- --verbose --unsafe-perm",
+    "release:prepare": "nx run-many -t release:prepare",
+    "test": "nx run-many -t test",
+    "verify": "npm ci && nx run-many -t verify",
+    "version:development": "export BUMP_DEVELOP_VERSION=$(npm version $(npm version minor)-SNAPSHOT) && nx release version --git-tag=false --git-commit=false $BUMP_DEVELOP_VERSION && npm version $(npm version minor)-SNAPSHOT && npm install",
+    "version:release": "npm ci && nx release version --git-tag=false --git-commit=false $RELEASE_VERSION && npm version $RELEASE_VERSION"
+  },
+  "author": "InditexTech",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "nx": "19.5.7"
+  },
+  "engines": {
+    "node": ">= 22.17.1",
+    "npm": ">= 10.9.2"
+  },
+  "repository": "github:InditexTech/npm-release-testing"
+}
