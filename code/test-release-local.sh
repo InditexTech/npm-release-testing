@@ -13,6 +13,7 @@ RELEASE_TYPE=${1:-minor}
 REGISTRY="http://localhost:4873"
 VERDACCIO_PID=""
 NPMRC_BACKUP=""
+PACK_DIR=""
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ── Colours ────────────────────────────────────────────────────────────────
@@ -33,6 +34,9 @@ cleanup() {
   else
     rm -f "$SCRIPT_DIR/.npmrc"
   fi
+
+  # Remove temp pack dir
+  [ -n "$PACK_DIR" ] && rm -rf "$PACK_DIR"
 
   # Kill Verdaccio
   if [ -n "$VERDACCIO_PID" ] && kill -0 "$VERDACCIO_PID" 2>/dev/null; then
@@ -109,10 +113,20 @@ info "Running release:prepare (build + verify each package) ..."
 npm run release:prepare
 success "Packages prepared"
 
-# ── Step 6: release:perform ────────────────────────────────────────────────
-info "Running release:perform (publish to local Verdaccio) ..."
-npm run release:perform
-success "Packages published!"
+# ── Step 6: pack (mirrors code-npm_node-publish-reusable.yml) ──────────────
+PACK_DIR="/tmp/npm-packages-local-$$"
+mkdir -p "$PACK_DIR"
+info "Packing workspaces to $PACK_DIR ..."
+npm pack --workspaces --pack-destination "$PACK_DIR"
+success "Packages packed:"
+ls "$PACK_DIR"/*.tgz | while read -r f; do echo "    $(basename "$f")"; done
+
+# ── Step 7: publish from tarball ───────────────────────────────────────────
+info "Publishing tarballs to local Verdaccio ..."
+for tarball in "$PACK_DIR"/*.tgz; do
+  npm publish "$tarball" --access public --tag latest
+  success "Published $(basename "$tarball")"
+done
 
 # ── Summary ────────────────────────────────────────────────────────────────
 echo ""
