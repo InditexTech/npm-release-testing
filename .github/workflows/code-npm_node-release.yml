@@ -285,6 +285,7 @@ jobs:
     uses: ./.github/workflows/code-npm_node-publish-reusable.yml
     with:
       artifact-name: npm-release-packages-${{ github.run_id }}
-      tag: latest
+      publish-type: RELEASE
     secrets:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
