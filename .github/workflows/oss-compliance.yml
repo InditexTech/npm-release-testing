@@ -20,7 +20,7 @@ jobs:
       - name: Setup Node version
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e # v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: "22"
 
       - name: Execute Repo Linter
         run: |

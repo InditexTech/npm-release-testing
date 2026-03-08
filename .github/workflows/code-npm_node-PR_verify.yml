@@ -87,5 +87,5 @@ jobs:
         id: version
         run: |
           echo "app-version=$(jq ".version" code/package.json)" >> "$GITHUB_OUTPUT"
-          echo "app-name=$(yq -oy '.name' code/package.json)" >> "$GITHUB_OUTPUT"
+          echo "app-name=$(jq -r '.name' code/package.json)" >> "$GITHUB_OUTPUT"
           echo "github-repository=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)" >> "$GITHUB_OUTPUT"
