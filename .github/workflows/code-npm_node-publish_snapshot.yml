@@ -170,7 +170,6 @@ jobs:
     needs: prepare
     uses: ./.github/workflows/code-npm_node-publish-reusable.yml
     with:
-      artifact-name: npm-snapshot-packages-${{ github.run_id }}
       publish-type: SNAPSHOT
     secrets:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

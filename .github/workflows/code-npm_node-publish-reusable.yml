@@ -4,10 +4,6 @@ name: code-npm-publish-reusable
 on:
   workflow_call:
     inputs:
-      artifact-name:
-        description: "Name of the artifact containing the .tgz packages"
-        required: true
-        type: string
       publish-type:
         description: "Type of publish operation: RELEASE or SNAPSHOT"
         required: true
@@ -35,7 +31,7 @@ jobs:
       - name: Download packages artifact
         uses: actions/download-artifact@v4
         with:
-          name: ${{ inputs.artifact-name }}
+          name: npm-${{ inputs.publish-type == 'RELEASE' && 'release' || 'snapshot' }}-packages-${{ github.run_id }}
           path: /tmp/npm-packages
 
       - name: Setup Node.js
