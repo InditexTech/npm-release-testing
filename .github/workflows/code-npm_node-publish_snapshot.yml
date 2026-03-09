@@ -92,7 +92,7 @@ jobs:
   publish-snapshot:
     name: Publish Snapshot to NPM
     needs: prepare-and-publish-snapshot
-    uses: ./.github/workflows/code-npm_node-publish-reusable-PROPOSED.yml
+    uses: ./.github/workflows/code-npm_node-publish-reusable.yml
     with:
       publish-type: SNAPSHOT
       checkout-ref: ${{ needs.prepare-and-publish-snapshot.outputs.pr_ref }}
