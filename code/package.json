@@ -2,7 +2,7 @@
   "name": "@inditextech/release-test",
   "version": "1.0.0-SNAPSHOT",
   "description": "Minimal monorepo to test the weavejs release workflows",
-  "packageManager": "npm@10.9.2",
+  "packageManager": "npm@10.2.4",
   "workspaces": [
     "packages/*"
   ],
