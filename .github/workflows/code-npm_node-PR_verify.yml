@@ -79,9 +79,14 @@ jobs:
           mkdir -p "$HOME"/.npm
 
       - name: NPM / Verify
+        id: npm-verify
         working-directory: code
         run: |
           npm run verify
+
+      - name: NPM / Debug log on failure
+        if: failure() && steps.npm-verify.outcome == 'failure'
+        run: cat /home/runner/.npm/_logs/*.log
 
       - name: Store project information
         id: version
