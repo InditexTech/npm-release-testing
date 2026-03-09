@@ -104,13 +104,13 @@ jobs:
   publish-release:
     name: Publish Release to NPM
     needs: prepare-release
-    uses: ./.github/workflows/code-npm_node-publish-reusable-PROPOSED.yml
+    uses: ./.github/workflows/code-npm_node-publish-reusable.yml
     with:
       publish-type: RELEASE
       checkout-ref: ${{ needs.prepare-release.outputs.baseline_branch }}
       release-version: ${{ needs.prepare-release.outputs.release_version }}
       commit-message-prefix: "chore: prepare release"
-      push-ref: ""  # Don't push, finalize-release will handle final commits and tags
+      push-ref: ""
       working-directory: code
       asdf-version: "0.18.0"
     secrets: inherit
