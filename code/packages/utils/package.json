@@ -31,8 +31,8 @@
     "url": "git+https://github.com/InditexTech/npm-release-testing.git"
   },
   "engines": {
-    "node": ">=18.12",
-    "npm": ">= 8.19.x"
+    "node": ">=18.12.0",
+    "npm": ">= 8.19.0"
   },
   "nx": {
     "implicitDependencies": [
