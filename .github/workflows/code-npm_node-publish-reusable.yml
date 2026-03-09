@@ -113,7 +113,7 @@ jobs:
       - name: Push changes
         if: inputs.push-ref != ''
         run: |
-          git push origin HEAD:${{ inputs.push-ref }} || echo "Failed to push, continuing..."
+          git push origin HEAD:${{ inputs.push-ref }}
 
       - name: Get current commit SHA
         id: get-sha
