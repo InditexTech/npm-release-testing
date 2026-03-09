@@ -8,20 +8,18 @@ on:
   issue_comment:
     types: [created]
 
-permissions:
-  id-token: write # Required for npm OIDC Trusted Publishers
-
 jobs:
-  prepare:
-    name: Publish Snapshot
+  prepare-and-publish-snapshot:
+    name: Prepare and Publish Snapshot
     if: >
       github.event.issue.pull_request != null &&
       github.event.comment.body == '/publish-snapshot'
     runs-on: ubuntu-24.04
-    env:
-      ASDF_BRANCH_VERSION: 0.18.0
     outputs:
-      snapshot_version: ${{ steps.define-snapshot-version.outputs.snapshot_version }}
+      snapshot_version: ${{ steps.define-version.outputs.snapshot_version }}
+      release_labels: ${{ steps.get-params.outputs.release_labels }}
+      pr_ref: ${{ steps.get-params.outputs.pr_ref }}
+      release_type: ${{ steps.determine-type.outputs.release_type }}
     steps:
       - name: Validate admin permissions
         id: permission-check
@@ -42,14 +40,14 @@ jobs:
             }
 
       - name: Get input parameters
+        id: get-params
         run: |
           RELEASE_LABELS="${{ join(github.event.issue.labels.*.name, ', ') }}"
           if [[ $RELEASE_LABELS != *release-type/* ]]; then
             RELEASE_LABELS="$RELEASE_LABELS, release-type/minor"
           fi
-          echo "RELEASE_LABELS=$RELEASE_LABELS" >> "$GITHUB_ENV"
-          BASELINE_BRANCH=${{ github.ref }}
-          echo "BASELINE_BRANCH=${BASELINE_BRANCH#refs/heads/}" >> "$GITHUB_ENV"
+          echo "release_labels=$RELEASE_LABELS" >> "$GITHUB_OUTPUT"
+          echo "pr_ref=refs/pull/${{ github.event.issue.number }}/head" >> "$GITHUB_OUTPUT"
 
       - name: Checkout PR branch
         uses: actions/checkout@v4
@@ -58,143 +56,75 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: NPM / Setup Dependencies Cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('code/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
-
-      - name: Setup asdf Cache
-        id: asdf-cache
-        uses: actions/cache@v4
-        continue-on-error: true
-        with:
-          path: ~/.asdf
-          key: ${{ runner.os }}-asdf-${{ env.ASDF_BRANCH_VERSION }}-${{ hashFiles('code/.tool-versions') }}
-
-      - name: Save tool-versions content
-        run: |
-          {
-            echo "TOOL_VERSIONS<<EOF"
-            cat code/.tool-versions
-            echo "EOF"
-          } >> "$GITHUB_ENV"
-
-      - name: Setup asdf environment
-        uses: asdf-vm/actions/install@1902764435ca0dd2f3388eea723a4f92a4eb8302 # v4.0.0
-        # https://github.com/asdf-vm/actions/issues/356
-        if: steps.asdf-cache.outputs.cache-hit != 'true'
-        with:
-          tool_versions: ${{ env.TOOL_VERSIONS }}
-          asdf_version: ${{ env.ASDF_BRANCH_VERSION }}
-
-      - name: NPM / Set npmrc
+      - name: Determine release type
+        id: determine-type
         env:
-          NPM_AUTH: ${{ secrets.NPM_TOKEN }}
-          NPM_REGISTRY: "https://registry.npmjs.org/"
+          RELEASE_LABELS: ${{ steps.get-params.outputs.release_labels }}
         run: |
-          echo "registry=${NPM_REGISTRY}" >> /home/runner/.npmrc
-          echo "@inditextech:registry=${NPM_REGISTRY}" >> /home/runner/.npmrc
-          echo "//registry.npmjs.org/:_authToken=${NPM_AUTH}" >> /home/runner/.npmrc
-          echo "always-auth=true" >> /home/runner/.npmrc
-
-      - name: NPM / Create Cache Folders
-        run: |
-          mkdir -p "$HOME"/.npm
-
-      - name: Setup patch release type version
-        if: contains(env.RELEASE_LABELS, 'release-type/hotfix')
-          || contains(env.RELEASE_LABELS, 'release-type/multi-hotfix')
-          || contains(env.RELEASE_LABELS, 'release-type/patch')
-        run: echo "RELEASE_VERSION=patch" >> "$GITHUB_ENV"
-
-      - name: Setup minor release type version
-        if: contains(env.RELEASE_LABELS, 'release-type/minor')
-        run: echo "RELEASE_VERSION=minor" >> "$GITHUB_ENV"
-
-      - name: Setup minor release type version when no label set and TBD
-        if: ${{ !contains(env.RELEASE_LABELS, 'release-type') && vars.DEVELOPMENT_FLOW == 'trunk-based-development' }}
-        run: echo "RELEASE_VERSION=minor" >> "$GITHUB_ENV"
-
-      - name: Setup major release type version
-        if: contains(env.RELEASE_LABELS, 'release-type/major')
-        run: echo "RELEASE_VERSION=major" >> "$GITHUB_ENV"
+          if [[ "$RELEASE_LABELS" == *"release-type/hotfix"* ]] || [[ "$RELEASE_LABELS" == *"release-type/multi-hotfix"* ]] || [[ "$RELEASE_LABELS" == *"release-type/patch"* ]]; then
+            echo "release_type=patch" >> "$GITHUB_OUTPUT"
+          elif [[ "$RELEASE_LABELS" == *"release-type/major"* ]]; then
+            echo "release_type=major" >> "$GITHUB_OUTPUT"
+          else
+            echo "release_type=minor" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Update CHANGELOG.md
         id: update-changelog
         uses: release-flow/keep-a-changelog-action@v3.0.0
         with:
           command: bump
-          version: ${{ env.RELEASE_VERSION }}
+          version: ${{ steps.determine-type.outputs.release_type }}
           changelog: code/CHANGELOG.md
           fail-on-empty-release-notes: false
           keep-unreleased-section: true
           tag-prefix: ""
 
       - name: Define snapshot version
-        id: define-snapshot-version
-        working-directory: code
+        id: define-version
         env:
           RELEASE_VERSION: ${{ steps.update-changelog.outputs.version }}
         run: |
           CLEAN_VERSION=$(echo "$RELEASE_VERSION" | sed -E 's/-.*$//')
-          PRE_RELEASE_VERSION="${CLEAN_VERSION}-SNAPSHOT.${{ github.run_number }}.${{ github.run_attempt }}"
-          echo "SNAPSHOT_VERSION=$PRE_RELEASE_VERSION" >> "$GITHUB_ENV"
-          echo "snapshot_version=$PRE_RELEASE_VERSION" >> "$GITHUB_OUTPUT"
+          SNAPSHOT_VERSION="${CLEAN_VERSION}-SNAPSHOT.${{ github.run_number }}.${{ github.run_attempt }}"
+          echo "snapshot_version=$SNAPSHOT_VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: NPM / Prepare snapshot
-        working-directory: code
-        env:
-          RELEASE_VERSION: ${{ env.SNAPSHOT_VERSION }}
-        run: |
-          npm run version:release
-          npm run release:prepare
-
-      - name: NPM / Pack packages
-        working-directory: code
-        run: |
-          mkdir -p /tmp/npm-packages
-          npm pack --workspaces --pack-destination /tmp/npm-packages
-
-      - name: Upload packages artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: npm-snapshot-packages-${{ github.run_id }}
-          path: /tmp/npm-packages/*.tgz
-          retention-days: 1
-
-  publish:
-    name: Publish to NPM
-    needs: prepare
-    uses: ./.github/workflows/code-npm_node-publish-reusable.yml
+  publish-snapshot:
+    name: Publish Snapshot to NPM
+    needs: prepare-and-publish-snapshot
+    uses: ./.github/workflows/code-npm_node-publish-reusable-PROPOSED.yml
     with:
       publish-type: SNAPSHOT
-    secrets:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      checkout-ref: ${{ needs.prepare-and-publish-snapshot.outputs.pr_ref }}
+      release-version: ${{ needs.prepare-and-publish-snapshot.outputs.snapshot_version }}
+      commit-message-prefix: "chore: prepare snapshot version"
+      push-ref: ${{ needs.prepare-and-publish-snapshot.outputs.pr_ref }}
+      working-directory: code
+      asdf-version: "0.18.0"
+    secrets: inherit
 
-  notify:
-    name: Notify PR
-    needs: [prepare, publish]
+  comment-result:
+    name: Comment on PR
+    needs: [prepare-and-publish-snapshot, publish-snapshot]
     if: always()
     runs-on: ubuntu-24.04
     steps:
       - name: Result / Comment on PR
         uses: actions/github-script@v7
         env:
-          SNAPSHOT_VERSION: ${{ needs.prepare.outputs.snapshot_version }}
+          SNAPSHOT_VERSION: ${{ needs.prepare-and-publish-snapshot.outputs.snapshot_version }}
+          PUBLISH_STATUS: ${{ needs.publish-snapshot.result }}
         with:
           script: |
-            const status = '${{ needs.publish.result }}';
+            const status = process.env.PUBLISH_STATUS;
+            const version = process.env.SNAPSHOT_VERSION;
 
             const body = status === 'success'
               ? [
                   "✅ Pre-release published successfully.",
                   "",
-                  `- Version: \`${process.env.SNAPSHOT_VERSION}\``,
-                  "- Tag: `next`"
+                  `- Version: \`${version}\``,
+                  "- Tag: \`next\`"
                 ]
               : [
                   "❌ Pre-release publish failed.",

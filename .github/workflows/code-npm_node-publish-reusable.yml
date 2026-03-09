@@ -1,5 +1,5 @@
 ---
-name: code-npm-publish-reusable
+name: code-npm-publish-reusable-enhanced
 
 on:
   workflow_call:
@@ -8,54 +8,196 @@ on:
         description: "Type of publish operation: RELEASE or SNAPSHOT"
         required: true
         type: string
-    secrets:
-      GITHUB_TOKEN:
-        description: "GitHub token"
+      checkout-ref:
+        description: "Git ref to checkout for initial setup (branch, tag, SHA, or PR ref)"
+        required: true
+        type: string
+      release-version:
+        description: "Exact version to use for release"
+        required: true
+        type: string
+      commit-message-prefix:
+        description: "Commit message prefix (e.g., 'chore: prepare snapshot version')"
+        required: true
+        type: string
+      push-ref:
+        description: "Git ref to push to (e.g., 'refs/pull/123/head' for PR, '' to skip push)"
         required: false
-      NPM_TOKEN:
-        description: "npm access token — not required when OIDC Trusted Publishers is configured"
+        type: string
+        default: ""
+      working-directory:
+        description: "Working directory where npm commands will be executed"
         required: false
+        type: string
+        default: "code"
+      asdf-version:
+        description: "ASDF version to use"
+        required: false
+        type: string
+        default: "0.18.0"
+    outputs:
+      commit_sha:
+        description: "SHA of the commit with prepared changes"
+        value: ${{ jobs.prepare.outputs.commit_sha }}
+      final_version:
+        description: "Final version prepared for release/snapshot"
+        value: ${{ jobs.prepare.outputs.final_version }}
 
 # Required for npm OIDC Trusted Publishers.
-# This workflow must be registered in npmjs.com under each package's
-# "Trusted Publishers" settings so that OIDC-based authentication works.
 permissions:
   id-token: write # Required for OIDC
   contents: read
 
 jobs:
-  publish:
-    name: Publish to NPM
+  prepare:
+    name: Prepare ${{ inputs.publish-type }}
     runs-on: ubuntu-24.04
+    env:
+      ASDF_BRANCH_VERSION: ${{ inputs.asdf-version }}
+    outputs:
+      commit_sha: ${{ steps.get-sha.outputs.commit_sha }}
+      final_version: ${{ steps.get-final-version.outputs.final_version }}
     steps:
-      - name: Download packages artifact
-        uses: actions/download-artifact@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
-          name: npm-${{ inputs.publish-type == 'RELEASE' && 'release' || 'snapshot' }}-packages-${{ github.run_id }}
-          path: /tmp/npm-packages
+          ref: ${{ inputs.checkout-ref }}
+          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup asdf Cache
+        id: asdf-cache
+        uses: actions/cache@v4
+        continue-on-error: true
         with:
-          node-version: "22.17.1"
-          registry-url: "https://registry.npmjs.org"
+          path: ~/.asdf
+          key: ${{ runner.os }}-asdf-${{ env.ASDF_BRANCH_VERSION }}-${{ hashFiles(format('{0}/.tool-versions', inputs.working-directory)) }}
 
-      - name: NPM / Release Perform - Distribution Platform
+      - name: Save tool-versions content
+        run: |
+          {
+            echo "TOOL_VERSIONS<<EOF"
+            cat ${{ inputs.working-directory }}/.tool-versions
+            echo "EOF"
+          } >> "$GITHUB_ENV"
+
+      - name: Setup asdf environment
+        uses: asdf-vm/actions/install@1902764435ca0dd2f3388eea723a4f92a4eb8302 # v4.0.0
+        if: steps.asdf-cache.outputs.cache-hit != 'true'
+        with:
+          tool_versions: ${{ env.TOOL_VERSIONS }}
+          asdf_version: ${{ env.ASDF_BRANCH_VERSION }}
+
+      - name: Set release version
+        id: get-final-version
+        run: |
+          echo "final_version=${{ inputs.release-version }}" >> "$GITHUB_OUTPUT"
+          echo "FINAL_VERSION=${{ inputs.release-version }}" >> "$GITHUB_ENV"
+
+      - name: NPM / Prepare release
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          RELEASE_VERSION: ${{ steps.get-final-version.outputs.final_version }}
+        run: |
+          npm run version:release
+          npm run release:prepare
+
+      - name: Commit changes
+        id: commit-changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "${{ inputs.commit-message-prefix }} ${{ steps.get-final-version.outputs.final_version }}" || echo "No changes to commit"
+
+      - name: Push changes
+        if: inputs.push-ref != ''
+        run: |
+          git push origin HEAD:${{ inputs.push-ref }} || echo "Failed to push, continuing..."
+
+      - name: Get current commit SHA
+        id: get-sha
+        run: |
+          echo "commit_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  publish:
+    name: Publish to NPM (${{ inputs.publish-type }})
+    needs: prepare
+    runs-on: ubuntu-24.04
+    env:
+      ASDF_BRANCH_VERSION: ${{ inputs.asdf-version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.commit_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: NPM / Setup Dependencies Cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles(format('{0}/package-lock.json', inputs.working-directory)) }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Setup asdf Cache
+        id: asdf-cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: ~/.asdf
+          key: ${{ runner.os }}-asdf-${{ env.ASDF_BRANCH_VERSION }}-${{ hashFiles(format('{0}/.tool-versions', inputs.working-directory)) }}
+
+      - name: Save tool-versions content
+        run: |
+          {
+            echo "TOOL_VERSIONS<<EOF"
+            cat ${{ inputs.working-directory }}/.tool-versions
+            echo "EOF"
+          } >> "$GITHUB_ENV"
+
+      - name: Setup asdf environment
+        uses: asdf-vm/actions/install@1902764435ca0dd2f3388eea723a4f92a4eb8302 # v4.0.0
+        if: steps.asdf-cache.outputs.cache-hit != 'true'
+        with:
+          tool_versions: ${{ env.TOOL_VERSIONS }}
+          asdf_version: ${{ env.ASDF_BRANCH_VERSION }}
+
+      - name: NPM / Set npmrc
+        env:
+          NPM_AUTH: ${{ secrets.NPM_TOKEN }}
+          NPM_REGISTRY: "https://registry.npmjs.org/"
+        run: |
+          echo "registry=${NPM_REGISTRY}" >> /home/runner/.npmrc
+          echo "@inditextech:registry=${NPM_REGISTRY}" >> /home/runner/.npmrc
+          echo "//registry.npmjs.org/:_authToken=${NPM_AUTH}" >> /home/runner/.npmrc
+          echo "always-auth=true" >> /home/runner/.npmrc
+
+      - name: NPM / Create Cache Folders
+        run: |
+          mkdir -p "$HOME"/.npm
+
+      - name: NPM / Install dependencies
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          npm ci
+
+      - name: NPM / Publish Release
         if: inputs.publish-type == 'RELEASE'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        working-directory: ${{ inputs.working-directory }}
         run: |
-          for tarball in /tmp/npm-packages/*.tgz; do
-            npm publish "$tarball" --provenance --access public
-          done
+          npm run release:perform
 
-      - name: NPM / Publish Snapshot - Distribution Platform
+      - name: NPM / Publish Snapshot
         if: inputs.publish-type == 'SNAPSHOT'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        working-directory: ${{ inputs.working-directory }}
         run: |
-          for tarball in /tmp/npm-packages/*.tgz; do
-            npm publish "$tarball" --provenance --access public --tag next
-          done
+          npm run publish:snapshot
