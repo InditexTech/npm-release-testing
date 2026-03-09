@@ -1,0 +1,42 @@
+{
+  "name": "@inditextech/release-test-utils",
+  "version": "1.0.0-SNAPSHOT",
+  "description": "Utils package for release workflow testing",
+  "type": "module",
+  "license": "Apache-2.0",
+  "author": "InditexTech",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node --input-type=module --eval \"import fs from 'fs'; fs.mkdirSync('dist', { recursive: true }); fs.copyFileSync('src/index.js', 'dist/index.js');\"",
+    "publish:snapshot": "npm publish --tag next --access public",
+    "release:perform": "npm publish --access public",
+    "release:prepare": "npm run verify",
+    "test": "echo \"No tests\" && exit 0",
+    "verify": "npm run test && npm run build",
+    "version:development": "npm version $(npm version minor)-SNAPSHOT",
+    "version:release": "npm version $RELEASE_VERSION -m \"[npm-scripts] prepare release $RELEASE_VERSION\" --tag-version-prefix \"\""
+  },
+  "dependencies": {
+    "@inditextech/release-test-core": "1.0.0-SNAPSHOT"
+  },
+  "repository": {
+    "url": "git+https://github.com/InditexTech/npm-release-testing.git"
+  },
+  "engines": {
+    "node": ">=18.12.0",
+    "npm": ">= 8.19.0"
+  },
+  "nx": {
+    "implicitDependencies": [
+      "@inditextech/release-test-core"
+    ]
+  }
+}

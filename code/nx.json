@@ -1,0 +1,42 @@
+{
+  "$schema": "./node_modules/nx/schemas/nx-schema.json",
+  "targetDefaults": {
+    "build": {
+      "dependsOn": ["^build"]
+    },
+    "publish:snapshot": {
+      "dependsOn": ["^publish:snapshot"],
+      "cache": true
+    },
+    "release:prepare": {
+      "dependsOn": ["^release:prepare"],
+      "cache": true
+    },
+    "release:perform": {
+      "dependsOn": ["^release:perform"],
+      "cache": true
+    },
+    "test": {
+      "dependsOn": ["^test"],
+      "cache": true
+    },
+    "verify": {
+      "dependsOn": ["^verify"],
+      "cache": true
+    }
+  },
+  "defaultBase": "main",
+  "release": {
+    "changelog": {
+      "workspaceChangelog": {
+        "renderOptions": {
+          "authors": true,
+          "mapAuthorsToGitHubUsernames": true,
+          "commitReferences": true,
+          "versionTitleDate": true
+        }
+      },
+      "automaticFromRef": true
+    }
+  }
+}

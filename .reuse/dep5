@@ -1,0 +1,8 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: npm-release-testing
+Upstream-Contact: oso@inditex.com
+Source: https://github.com/InditexTech/npm-release-testing
+
+Files: *
+Copyright: 2024 InditexTech
+License: Apache-2.0
