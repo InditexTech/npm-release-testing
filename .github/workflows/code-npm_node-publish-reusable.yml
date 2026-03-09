@@ -16,15 +16,6 @@ on:
         description: "Exact version to use for release"
         required: true
         type: string
-      commit-message-prefix:
-        description: "Commit message prefix (e.g., 'chore: prepare snapshot version')"
-        required: true
-        type: string
-      push-ref:
-        description: "Git ref to push to (e.g., 'refs/pull/123/head' for PR, '' to skip push)"
-        required: false
-        type: string
-        default: ""
       working-directory:
         description: "Working directory where npm commands will be executed"
         required: false
@@ -36,26 +27,21 @@ on:
         type: string
         default: "0.18.0"
     outputs:
-      commit_sha:
-        description: "SHA of the commit with prepared changes"
-        value: ${{ jobs.prepare.outputs.commit_sha }}
       final_version:
         description: "Final version prepared for release/snapshot"
-        value: ${{ jobs.prepare.outputs.final_version }}
+        value: ${{ jobs.prepare-and-publish.outputs.final_version }}
 
-# Required for npm OIDC Trusted Publishers and pushing commits.
 permissions:
-  id-token: write # Required for OIDC
-  contents: write # Required for pushing commits
+  id-token: write
+  contents: read
 
 jobs:
-  prepare:
-    name: Prepare ${{ inputs.publish-type }}
+  prepare-and-publish:
+    name: Prepare and Publish ${{ inputs.publish-type }}
     runs-on: ubuntu-24.04
     env:
       ASDF_BRANCH_VERSION: ${{ inputs.asdf-version }}
     outputs:
-      commit_sha: ${{ steps.get-sha.outputs.commit_sha }}
       final_version: ${{ steps.get-final-version.outputs.final_version }}
     steps:
       - name: Checkout code
@@ -64,91 +50,6 @@ jobs:
           ref: ${{ inputs.checkout-ref }}
           fetch-depth: 0
           persist-credentials: false
-
-      - name: Setup asdf Cache
-        id: asdf-cache
-        uses: actions/cache@v4
-        continue-on-error: true
-        with:
-          path: ~/.asdf
-          key: ${{ runner.os }}-asdf-${{ env.ASDF_BRANCH_VERSION }}-${{ hashFiles(format('{0}/.tool-versions', inputs.working-directory)) }}
-
-      - name: Save tool-versions content
-        run: |
-          {
-            echo "TOOL_VERSIONS<<EOF"
-            cat ${{ inputs.working-directory }}/.tool-versions
-            echo "EOF"
-          } >> "$GITHUB_ENV"
-
-      - name: Setup asdf environment
-        uses: asdf-vm/actions/install@1902764435ca0dd2f3388eea723a4f92a4eb8302 # v4.0.0
-        if: steps.asdf-cache.outputs.cache-hit != 'true'
-        with:
-          tool_versions: ${{ env.TOOL_VERSIONS }}
-          asdf_version: ${{ env.ASDF_BRANCH_VERSION }}
-
-      - name: Set release version
-        id: get-final-version
-        run: |
-          echo "final_version=${{ inputs.release-version }}" >> "$GITHUB_OUTPUT"
-          echo "FINAL_VERSION=${{ inputs.release-version }}" >> "$GITHUB_ENV"
-
-      - name: NPM / Prepare release
-        working-directory: ${{ inputs.working-directory }}
-        env:
-          RELEASE_VERSION: ${{ steps.get-final-version.outputs.final_version }}
-        run: |
-          npm run version:release
-          npm run release:prepare
-
-      - name: Commit changes
-        id: commit-changes
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "${{ inputs.commit-message-prefix }} ${{ steps.get-final-version.outputs.final_version }}" || echo "No changes to commit"
-
-      - name: Configure git credentials
-        if: inputs.push-ref != ''
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git config --global credential.helper store
-          echo "https://x-access-token:${GITHUB_TOKEN}@github.com" >> ~/.git-credentials
-
-      - name: Push changes
-        if: inputs.push-ref != ''
-        run: |
-          git push origin HEAD:${{ inputs.push-ref }}
-
-      - name: Get current commit SHA
-        id: get-sha
-        run: |
-          echo "commit_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
-  publish:
-    name: Publish to NPM (${{ inputs.publish-type }})
-    needs: prepare
-    runs-on: ubuntu-24.04
-    env:
-      ASDF_BRANCH_VERSION: ${{ inputs.asdf-version }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.prepare.outputs.commit_sha }}
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: NPM / Setup Dependencies Cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles(format('{0}/package-lock.json', inputs.working-directory)) }}
-          restore-keys: |
-            ${{ runner.os }}-node-
 
       - name: Setup asdf Cache
         id: asdf-cache
@@ -187,10 +88,27 @@ jobs:
         run: |
           mkdir -p "$HOME"/.npm
 
-      - name: NPM / Install dependencies
-        working-directory: ${{ inputs.working-directory }}
+      - name: NPM / Setup Dependencies Cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles(format('{0}/package-lock.json', inputs.working-directory)) }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Set release version
+        id: get-final-version
         run: |
-          npm ci
+          echo "final_version=${{ inputs.release-version }}" >> "$GITHUB_OUTPUT"
+          echo "FINAL_VERSION=${{ inputs.release-version }}" >> "$GITHUB_ENV"
+
+      - name: NPM / Prepare release
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          RELEASE_VERSION: ${{ steps.get-final-version.outputs.final_version }}
+        run: |
+          npm run version:release
+          npm run release:prepare
 
       - name: NPM / Publish Release
         if: inputs.publish-type == 'RELEASE'

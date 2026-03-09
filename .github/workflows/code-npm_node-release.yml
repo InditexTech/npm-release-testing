@@ -37,6 +37,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       release_version: ${{ steps.update-changelog.outputs.version }}
+      release_type: ${{ steps.determine-type.outputs.release_type }}
       baseline_branch: ${{ steps.get-params.outputs.baseline_branch }}
     steps:
       - name: Validate admin permissions
@@ -83,12 +84,14 @@ jobs:
         id: determine-type
         run: |
           if [[ "$RELEASE_LABELS" == *"release-type/hotfix"* ]] || [[ "$RELEASE_LABELS" == *"release-type/multi-hotfix"* ]] || [[ "$RELEASE_LABELS" == *"release-type/patch"* ]]; then
-            echo "RELEASE_VERSION=patch" >> "$GITHUB_ENV"
+            RELEASE_TYPE=patch
           elif [[ "$RELEASE_LABELS" == *"release-type/major"* ]]; then
-            echo "RELEASE_VERSION=major" >> "$GITHUB_ENV"
+            RELEASE_TYPE=major
           else
-            echo "RELEASE_VERSION=minor" >> "$GITHUB_ENV"
+            RELEASE_TYPE=minor
           fi
+          echo "RELEASE_VERSION=$RELEASE_TYPE" >> "$GITHUB_ENV"
+          echo "release_type=$RELEASE_TYPE" >> "$GITHUB_OUTPUT"
 
       - name: Update CHANGELOG.md
         id: update-changelog
@@ -109,8 +112,6 @@ jobs:
       publish-type: RELEASE
       checkout-ref: ${{ needs.prepare-release.outputs.baseline_branch }}
       release-version: ${{ needs.prepare-release.outputs.release_version }}
-      commit-message-prefix: "chore: prepare release"
-      push-ref: ""
       working-directory: code
       asdf-version: "0.18.0"
     secrets: inherit
@@ -122,10 +123,10 @@ jobs:
     env:
       ASDF_BRANCH_VERSION: 0.18.0
     steps:
-      - name: Checkout prepared release commit
+      - name: Checkout baseline branch
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.publish-release.outputs.commit_sha }}
+          ref: ${{ needs.prepare-release.outputs.baseline_branch }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -166,6 +167,24 @@ jobs:
           git config user.name "InditexTech CI"
           git config user.email "oso@inditex.com"
 
+      - name: Update CHANGELOG.md
+        id: update-changelog
+        uses: release-flow/keep-a-changelog-action@v3.0.0
+        with:
+          command: bump
+          version: ${{ needs.prepare-release.outputs.release_type }}
+          changelog: code/CHANGELOG.md
+          fail-on-empty-release-notes: false
+          keep-unreleased-section: true
+          tag-prefix: ""
+
+      - name: NPM / Prepare release version
+        working-directory: code
+        env:
+          RELEASE_VERSION: ${{ needs.publish-release.outputs.final_version }}
+        run: |
+          npm run version:release
+
       - name: Release / Commit and Tag
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -173,7 +192,7 @@ jobs:
         working-directory: code
         run: |
           git commit -i CHANGELOG.md -m "chore: Update CHANGELOG with $RELEASE_VERSION version" --no-verify
-          git commit -i package.json package-lock.json -m "[npm-scripts] Release $RELEASE_VERSION" --no-verify
+          git commit -i package.json package-lock.json packages/*/package.json -m "[npm-scripts] Release $RELEASE_VERSION" --no-verify
           git tag $RELEASE_VERSION
           git push --atomic --no-verify origin HEAD $RELEASE_VERSION
 
@@ -187,7 +206,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         working-directory: code
         run: |
-          git commit -i package.json package-lock.json -m "[npm-scripts] prepare for next development iteration" --no-verify
+          git commit -i package.json package-lock.json packages/*/package.json -m "[npm-scripts] prepare for next development iteration" --no-verify
           git push --no-verify origin HEAD
 
       - name: Next Development Iteration / Create Sync Branch PR into Develop
