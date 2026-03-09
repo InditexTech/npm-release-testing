@@ -100,7 +100,6 @@ jobs:
           RELEASE_VERSION: ${{ steps.get-final-version.outputs.final_version }}
         run: |
           npm run version:release
-          npm install
           npm run release:prepare
 
       - name: Commit changes
