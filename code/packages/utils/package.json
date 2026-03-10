@@ -1,6 +1,6 @@
 {
   "name": "@inditextech/release-test-utils",
-  "version": "1.1.0-SNAPSHOT.5.1",
+  "version": "2.0.1",
   "description": "Utils package for release workflow testing",
   "type": "module",
   "license": "Apache-2.0",
