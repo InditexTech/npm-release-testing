@@ -48,25 +48,24 @@ jobs:
             exit 1
           fi
 
-      - name: Validate actor team membership
+      - name: Validate admin permissions
+        id: permission-check
         uses: actions/github-script@v7
         with:
           script: |
-            const org = process.env.ORG_NAME;
-            const team = process.env.TEAM_SLUG;
-            const user = context.actor;
-            try {
-              const response = await github.rest.teams.getMembershipForUserInOrg({
-                org,
-                team_slug: team,
-                username: user
-              });
-              if (response?.data?.state !== 'active') {
-                core.setFailed(`User @${user} is not an active member of ${org}/${team}.`);
-              }
-            } catch (error) {
-              core.setFailed(`Unable to validate team membership for @${user} in ${org}/${team}: ${error.message}`);
+            const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              username: context.actor
+            });
+
+            const permission = data.permission;
+            core.info(`User permission level: ${permission}`);
+
+            if (permission !== 'admin') {
+              core.setFailed(`User @${context.actor} is not a repository admin.`);
             }
+
 
       - name: Checkout repository
         uses: actions/checkout@v4
