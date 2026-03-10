@@ -1,0 +1,160 @@
+---
+name: code-npm-bootstrap-publish
+run-name: "Bootstrap publish (${{ inputs.PUBLISH_MODE }}) by ${{ github.actor }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      RELEASE_VERSION:
+        description: "Exact version to publish (e.g. 1.1.0-SNAPSHOT.6.1)"
+        required: true
+        type: string
+      PUBLISH_MODE:
+        description: "Publish mode"
+        required: true
+        default: snapshot
+        type: choice
+        options:
+          - snapshot
+          - stable
+      DRY_RUN:
+        description: "Validate flow without publishing"
+        required: true
+        default: true
+        type: boolean
+      CONFIRM:
+        description: "Type BOOTSTRAP_CONFIRM to continue"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap-publish:
+    name: Bootstrap Publish
+    runs-on: ubuntu-24.04
+    env:
+      ORG_NAME: InditexTech
+      TEAM_SLUG: npm-trusted-publisher
+      WORKING_DIRECTORY: code
+      NPM_REGISTRY: https://registry.npmjs.org/
+      ASDF_BRANCH_VERSION: 0.18.0
+    steps:
+      - name: Validate confirmation token
+        run: |
+          if [[ "${{ inputs.CONFIRM }}" != "BOOTSTRAP_CONFIRM" ]]; then
+            echo "Invalid confirmation token. Expected BOOTSTRAP_CONFIRM."
+            exit 1
+          fi
+
+      - name: Validate actor team membership
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const org = process.env.ORG_NAME;
+            const team = process.env.TEAM_SLUG;
+            const user = context.actor;
+            try {
+              const response = await github.rest.teams.getMembershipForUserInOrg({
+                org,
+                team_slug: team,
+                username: user
+              });
+              if (response?.data?.state !== 'active') {
+                core.setFailed(`User @${user} is not an active member of ${org}/${team}.`);
+              }
+            } catch (error) {
+              core.setFailed(`Unable to validate team membership for @${user} in ${org}/${team}: ${error.message}`);
+            }
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup asdf Cache
+        id: asdf-cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: ~/.asdf
+          key: ${{ runner.os }}-asdf-${{ env.ASDF_BRANCH_VERSION }}-${{ hashFiles(format('{0}/.tool-versions', env.WORKING_DIRECTORY)) }}
+
+      - name: Save tool-versions content
+        run: |
+          {
+            echo "TOOL_VERSIONS<<EOF"
+            cat ${{ env.WORKING_DIRECTORY }}/.tool-versions
+            echo "EOF"
+          } >> "$GITHUB_ENV"
+
+      - name: Setup asdf environment
+        uses: asdf-vm/actions/install@1902764435ca0dd2f3388eea723a4f92a4eb8302 # v4.0.0
+        if: steps.asdf-cache.outputs.cache-hit != 'true'
+        with:
+          tool_versions: ${{ env.TOOL_VERSIONS }}
+          asdf_version: ${{ env.ASDF_BRANCH_VERSION }}
+
+      - name: NPM / Ensure minimum npm version
+        run: |
+          npm install --global npm@^11.5.1
+          node --version
+          npm --version
+
+      - name: NPM / Configure npmrc for bootstrap
+        env:
+          NPM_AUTH: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [[ -z "$NPM_AUTH" ]]; then
+            echo "NPM_TOKEN secret is required for bootstrap publish."
+            exit 1
+          fi
+          echo "registry=${NPM_REGISTRY}" > /home/runner/.npmrc
+          echo "@inditextech:registry=${NPM_REGISTRY}" >> /home/runner/.npmrc
+          echo "//registry.npmjs.org/:_authToken=${NPM_AUTH}" >> /home/runner/.npmrc
+          echo "always-auth=true" >> /home/runner/.npmrc
+
+      - name: NPM / Setup Dependencies Cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles(format('{0}/package-lock.json', env.WORKING_DIRECTORY)) }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Set release version
+        run: |
+          echo "RELEASE_VERSION=${{ inputs.RELEASE_VERSION }}" >> "$GITHUB_ENV"
+
+      - name: NPM / Preflight install
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: npm ci
+
+      - name: NPM / Prepare release version and assets
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          npm run version:release
+          npm run release:prepare
+
+      - name: NPM / Publish snapshot
+        if: inputs.DRY_RUN == false && inputs.PUBLISH_MODE == 'snapshot'
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm run publish:snapshot
+
+      - name: NPM / Publish stable
+        if: inputs.DRY_RUN == false && inputs.PUBLISH_MODE == 'stable'
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm run release:perform
+
+      - name: Publish summary
+        run: |
+          echo "Bootstrap completed."
+          echo "Mode: ${{ inputs.PUBLISH_MODE }}"
+          echo "Version: ${{ inputs.RELEASE_VERSION }}"
+          echo "Dry run: ${{ inputs.DRY_RUN }}"
