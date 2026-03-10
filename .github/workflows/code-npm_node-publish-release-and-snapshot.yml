@@ -112,7 +112,11 @@ jobs:
 
       - name: NPM / Ensure minimum npm version for trusted publishing
         run: |
-          npm install --global npm@^11.5.1
+          NPM_USER_PREFIX="$HOME/.npm-global"
+          mkdir -p "$NPM_USER_PREFIX"
+          NPM_CONFIG_USERCONFIG=/dev/null npm install --prefix "$NPM_USER_PREFIX" npm@^11.5.1 --registry="https://registry.npmjs.org/"
+          echo "$NPM_USER_PREFIX/bin" >> "$GITHUB_PATH"
+          export PATH="$NPM_USER_PREFIX/bin:$PATH"
           npm --version
 
       - name: NPM / Set npmrc registry
@@ -285,7 +289,11 @@ jobs:
 
       - name: NPM / Ensure minimum npm version for trusted publishing
         run: |
-          npm install --global npm@^11.5.1
+          NPM_USER_PREFIX="$HOME/.npm-global"
+          mkdir -p "$NPM_USER_PREFIX"
+          NPM_CONFIG_USERCONFIG=/dev/null npm install --prefix "$NPM_USER_PREFIX" npm@^11.5.1 --registry="https://registry.npmjs.org/"
+          echo "$NPM_USER_PREFIX/bin" >> "$GITHUB_PATH"
+          export PATH="$NPM_USER_PREFIX/bin:$PATH"
           npm --version
 
       - name: NPM / Set npmrc registry
