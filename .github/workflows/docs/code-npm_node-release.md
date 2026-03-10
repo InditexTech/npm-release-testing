@@ -1,11 +1,12 @@
 # `code-npm-release`
 
-[`code-npm_node-release.yml`](../code-npm_node-release.yml) workflow releases a new version to NPM and also generates the associated release in GitHub.
+[`code-npm_node-publish-release-and-snapshot.yml`](../code-npm_node-publish-release-and-snapshot.yml) workflow publishes snapshot and release versions to npm and also generates the associated GitHub release in the release path.
 
 ## Triggers
 
 - Any `closed` pull request to `main` branch on `code` path, if no `skip-release` label AND if a `release-type/*` label is added if using Gitflow development flow.
 - A manual dispatch (`workflow_dispatch`) invoked from the GitHub UI.
+- An issue comment (`/publish-snapshot`) on a pull request.
 
 ## Where does it run?
 
