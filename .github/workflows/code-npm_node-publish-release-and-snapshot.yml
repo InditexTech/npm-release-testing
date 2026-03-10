@@ -335,13 +335,23 @@ jobs:
           https://ci-user:$GITHUB_TOKEN@github.com
           EOT
 
-          echo "$SCM_COMMITTER_PGP_KEY" | gpg --batch --import
-            FPR=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/ {print $10; exit}')
-            git config user.name "InditexTech CI"
-            git config user.email "oso@inditex.com"
-            git config --global gpg.program gpg
-            git config --global user.signingkey "$FPR"
-            git config --global commit.gpgsign true
+          if [[ -z "$SCM_COMMITTER_PGP_KEY" ]]; then
+            echo "CI_GPG_SECRET_KEY is empty or not available to this workflow"
+            exit 1
+          fi
+
+          echo "$SCM_COMMITTER_PGP_KEY" | gpg --batch --yes --pinentry-mode loopback --import
+          FPR=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/ {print $10; exit}')
+          if [[ -z "$FPR" ]]; then
+            echo "No secret key fingerprint found after GPG import"
+            exit 1
+          fi
+
+          git config user.name "InditexTech CI"
+          git config user.email "oso@inditex.com"
+          git config --global gpg.program gpg
+          git config --global user.signingkey "$FPR"
+          git config --global commit.gpgsign true
 
       - name: Update CHANGELOG.md
         id: update-changelog
@@ -365,9 +375,24 @@ jobs:
       - name: NPM / Release Perform - Distribution Platform
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true"
         working-directory: code
         run: |
-          npm run release:perform
+          set -o pipefail
+          npm run release:perform 2>&1 | tee /tmp/release-perform.log
+
+      - name: NPM / Dump release diagnostics
+        if: failure()
+        run: |
+          echo "--- release:perform output (tail) ---"
+          tail -n 200 /tmp/release-perform.log || true
+          echo "--- npm debug logs ---"
+          ls -lah "$HOME/.npm/_logs" || true
+          for logfile in "$HOME"/.npm/_logs/*-debug-*.log; do
+            [[ -f "$logfile" ]] || continue
+            echo "===== $logfile ====="
+            tail -n 200 "$logfile" || true
+          done
 
       - name: Release / Commit and Tag
         env:
