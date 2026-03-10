@@ -325,6 +325,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SCM_COMMITTER_PGP_KEY: ${{ secrets.CI_GPG_SECRET_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.CI_GPG_SECRET_KEY_PASSWORD }}
         run: |
           git config --global credential.helper store
           cat <<EOT >> ~/.git-credentials
@@ -333,6 +334,16 @@ jobs:
 
           echo "$SCM_COMMITTER_PGP_KEY" | gpg --batch --import
           FPR=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/ {print $10; exit}')
+          
+          # Configure gpg-agent to use the passphrase automatically
+          mkdir -p ~/.gnupg
+          echo "allow-preset-passphrase" >> ~/.gnupg/gpg-agent.conf
+          gpgconf --kill gpg-agent
+          
+          # Preset the passphrase for the key
+          KEYGRIP=$(gpg --list-secret-keys --with-keygrip "$FPR" | grep -oP 'Keygrip = \K[0-9A-Fa-f]+' | head -1)
+          echo -n "$GPG_PASSPHRASE" | gpg-preset-passphrase --preset "$KEYGRIP"
+          
           git config user.name "InditexTech CI"
           git config user.email "oso@inditex.com"
           git config --global gpg.program gpg
