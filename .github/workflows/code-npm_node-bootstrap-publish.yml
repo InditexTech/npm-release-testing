@@ -96,12 +96,6 @@ jobs:
           tool_versions: ${{ env.TOOL_VERSIONS }}
           asdf_version: ${{ env.ASDF_BRANCH_VERSION }}
 
-      - name: NPM / Ensure minimum npm version
-        run: |
-          npm install --global npm@^11.5.1
-          node --version
-          npm --version
-
       - name: NPM / Configure npmrc for bootstrap
         env:
           NPM_AUTH: ${{ secrets.NPM_TOKEN }}
@@ -114,6 +108,12 @@ jobs:
           echo "@inditextech:registry=${NPM_REGISTRY}" >> /home/runner/.npmrc
           echo "//registry.npmjs.org/:_authToken=${NPM_AUTH}" >> /home/runner/.npmrc
           echo "always-auth=true" >> /home/runner/.npmrc
+      
+      - name: NPM / Ensure minimum npm version
+        run: |
+          npm install --global npm@^11.5.1
+          node --version
+          npm --version
 
       - name: NPM / Setup Dependencies Cache
         uses: actions/cache@v4
