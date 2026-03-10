@@ -6,8 +6,8 @@
 # Usage:
 #   ./test-release-local.sh [release|snapshot] [minor|patch|major]
 #
-#   release  (default) — mirrors code-npm_node-release.yml       → tag: latest
-#   snapshot           — mirrors code-npm_node-publish_snapshot.yml → tag: next
+#   release  (default) — mirrors code-npm_node-publish-release-and-snapshot.yml (release path)  → tag: latest
+#   snapshot           — mirrors code-npm_node-publish-release-and-snapshot.yml (snapshot path) → tag: next
 #
 # Examples:
 #   ./test-release-local.sh                    # release minor
@@ -109,7 +109,7 @@ success "Dependencies installed"
 
 # ── Step 4: compute version ────────────────────────────────────────────────
 if [[ "$MODE" == "snapshot" ]]; then
-  # Mirrors the "Define snapshot version" step in code-npm_node-publish_snapshot.yml:
+  # Mirrors the "Define snapshot version" step in code-npm_node-publish-release-and-snapshot.yml:
   # CLEAN_VERSION-SNAPSHOT.<run_number>.<run_attempt>
   # Locally simulated as: bumped version + -SNAPSHOT.1.1
   CLEAN_VERSION=$(node -e "
@@ -149,7 +149,7 @@ info "Running release:prepare (build + verify each package) ..."
 npm run release:prepare
 success "Packages prepared"
 
-# ── Step 7: pack (mirrors code-npm_node-publish-reusable.yml) ──────────────
+# ── Step 7: pack (mirrors code-npm_node-publish-release-and-snapshot.yml) ───
 PACK_DIR="/tmp/npm-packages-local-$$"
 mkdir -p "$PACK_DIR"
 info "Packing workspaces to $PACK_DIR ..."
