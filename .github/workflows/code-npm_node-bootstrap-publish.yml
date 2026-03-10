@@ -111,7 +111,11 @@ jobs:
       
       - name: NPM / Ensure minimum npm version
         run: |
-          npm install --global npm@^11.5.1
+          NPM_USER_PREFIX="$HOME/.npm-global"
+          mkdir -p "$NPM_USER_PREFIX"
+          NPM_CONFIG_USERCONFIG=/dev/null npm install --prefix "$NPM_USER_PREFIX" npm@^11.5.1 --registry="${NPM_REGISTRY}"
+          echo "$NPM_USER_PREFIX/bin" >> "$GITHUB_PATH"
+          export PATH="$NPM_USER_PREFIX/bin:$PATH"
           node --version
           npm --version
 
