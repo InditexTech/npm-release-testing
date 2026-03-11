@@ -1,6 +1,6 @@
 {
   "name": "@inditextech/release-test-utils",
-  "version": "3.3.0",
+  "version": "3.4.0-SNAPSHOT",
   "description": "Utils package for release workflow testing",
   "type": "module",
   "license": "Apache-2.0",
@@ -25,7 +25,7 @@
     "version:release": "npm version $RELEASE_VERSION -m \"[npm-scripts] prepare release $RELEASE_VERSION\" --tag-version-prefix \"\""
   },
   "dependencies": {
-    "@inditextech/release-test-core": "3.3.0"
+    "@inditextech/release-test-core": "3.4.0-SNAPSHOT"
   },
   "repository": {
     "url": "git+https://github.com/InditexTech/npm-release-testing.git"
