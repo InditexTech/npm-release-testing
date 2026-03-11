@@ -324,17 +324,30 @@ jobs:
       - name: Prepare committer information
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GPG_PRIVATE_KEY: ${{ secrets.CI_GPG_SECRET_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.CI_GPG_SECRET_KEY_PASSWORD }}
         run: |
           git config --global credential.helper store
           cat <<EOT >> ~/.git-credentials
           https://ci-user:$GITHUB_TOKEN@github.com
           EOT
 
+          # GPG: configure agent, import key, cache passphrase
+          mkdir -p ~/.gnupg && chmod 700 ~/.gnupg
+          echo "allow-loopback-pinentry" > ~/.gnupg/gpg-agent.conf
+          echo "allow-preset-passphrase" >> ~/.gnupg/gpg-agent.conf
+          gpgconf --kill gpg-agent || true
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          KEYGRIP=$(gpg --list-secret-keys --with-colons | awk -F: '/^grp:/ {print $10; exit}')
+          /usr/lib/gnupg/gpg-preset-passphrase --preset "$KEYGRIP" <<< "$GPG_PASSPHRASE"
+
+          # Git: identity and signing
+          FPR=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/ {print $10; exit}')
           git config user.name "InditexTech CI"
           git config user.email "oso@inditex.com"
-          git config --global commit.gpgsign false
-
-
+          git config user.signingkey "$FPR"
+          git config commit.gpgsign true
+          git config tag.gpgsign true
 
       - name: Update CHANGELOG.md
         id: update-changelog
@@ -371,7 +384,7 @@ jobs:
         run: |
           git commit -i CHANGELOG.md -m "chore: Update CHANGELOG with ${{ steps.update-changelog.outputs.version }} version" --no-verify
           git commit -i package.json package-lock.json packages/*/package.json -m "[npm-scripts] Release ${{ steps.update-changelog.outputs.version }}" --no-verify
-          git tag ${{ steps.update-changelog.outputs.version }}
+          git tag -a -m "Release ${{ steps.update-changelog.outputs.version }}" ${{ steps.update-changelog.outputs.version }}
           git push --atomic --no-verify origin HEAD ${{ steps.update-changelog.outputs.version }}
 
       - name: NPM / Set next development version

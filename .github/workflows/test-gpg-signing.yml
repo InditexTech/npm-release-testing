@@ -18,75 +18,112 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Import GPG key
+      - name: Configure gpg-agent (before any GPG operation)
+        run: |
+          mkdir -p ~/.gnupg
+          chmod 700 ~/.gnupg
+          echo "allow-loopback-pinentry" > ~/.gnupg/gpg-agent.conf
+          echo "allow-preset-passphrase" >> ~/.gnupg/gpg-agent.conf
+          echo "use-agent" > ~/.gnupg/gpg.conf
+          echo "pinentry-mode loopback" >> ~/.gnupg/gpg.conf
+          gpgconf --kill gpg-agent || true
+          gpg-agent --daemon || true
+          echo "gpg version: $(gpg --version | head -1)"
+          echo "gpg-agent config:"
+          cat ~/.gnupg/gpg-agent.conf
+          echo "gpg config:"
+          cat ~/.gnupg/gpg.conf
+
+      - name: Import GPG key and test signing
         env:
           GPG_PRIVATE_KEY: ${{ secrets.CI_GPG_SECRET_KEY }}
           GPG_KEY_ID: ${{ secrets.CI_GPG_KEY_ID }}
           GPG_PASSPHRASE: ${{ secrets.CI_GPG_SECRET_KEY_PASSWORD }}
         run: |
-          echo "::group::Import GPG private key"
-          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
-          echo "::endgroup::"
+          echo "=== Check secrets are populated ==="
+          [ -n "$GPG_PRIVATE_KEY" ] && echo "CI_GPG_SECRET_KEY: SET (${#GPG_PRIVATE_KEY} chars)" || echo "::error::CI_GPG_SECRET_KEY is EMPTY"
+          [ -n "$GPG_KEY_ID" ] && echo "CI_GPG_KEY_ID: SET" || echo "::error::CI_GPG_KEY_ID is EMPTY"
+          [ -n "$GPG_PASSPHRASE" ] && echo "CI_GPG_SECRET_KEY_PASSWORD: SET (${#GPG_PASSPHRASE} chars)" || echo "::warning::CI_GPG_SECRET_KEY_PASSWORD is EMPTY"
 
-          echo "::group::GPG key info"
-          gpg --list-keys
-          gpg --list-secret-keys
-          echo "::endgroup::"
+          echo ""
+          echo "=== Import GPG private key ==="
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import 2>&1
 
-          echo "::group::Configure gpg-agent for loopback pinentry"
-          mkdir -p ~/.gnupg
-          echo "allow-loopback-pinentry" >> ~/.gnupg/gpg-agent.conf
-          echo "use-agent" >> ~/.gnupg/gpg.conf
-          echo "pinentry-mode loopback" >> ~/.gnupg/gpg.conf
-          gpgconf --kill gpg-agent
-          gpgconf --launch gpg-agent
-          echo "::endgroup::"
+          echo ""
+          echo "=== List secret keys with keygrip ==="
+          gpg --list-secret-keys --with-keygrip
 
-          echo "::group::Test GPG signing (standalone)"
-          echo "test" | gpg --batch --yes --passphrase "$GPG_PASSPHRASE" \
-            --pinentry-mode loopback --clearsign
-          echo "::endgroup::"
+          echo ""
+          echo "=== Write passphrase to temp file ==="
+          printf '%s' "$GPG_PASSPHRASE" > /tmp/.gpg_pass
+          echo "Passphrase file size: $(wc -c < /tmp/.gpg_pass) bytes"
 
-          echo "::group::Pre-seed passphrase in gpg-agent"
-          echo "RELOADAGENT" | gpg-connect-agent
-          /usr/lib/gnupg/gpg-preset-passphrase --preset \
-            "$(gpg --list-secret-keys --with-keygrip 2>/dev/null \
-              | grep -A1 '^\s*sec' | grep Keygrip | awk '{print $3}')" \
-            <<< "$GPG_PASSPHRASE"
-          echo "Passphrase pre-seeded for signing key"
-          echo "::endgroup::"
+          echo ""
+          echo "=== Test 1: clearsign with --passphrase-file ==="
+          echo "test payload" | gpg --batch --yes --pinentry-mode loopback \
+            --passphrase-file /tmp/.gpg_pass --clearsign && echo "PASS" || echo "FAIL"
+
+          echo ""
+          echo "=== Pre-seed passphrase in gpg-agent ==="
+          KEYGRIP=$(gpg --list-secret-keys --with-keygrip 2>/dev/null \
+            | grep -A1 '^\s*sec' | grep Keygrip | awk '{print $3}' | head -1)
+          echo "Keygrip: $KEYGRIP"
+          if [ -n "$KEYGRIP" ]; then
+            /usr/lib/gnupg/gpg-preset-passphrase --preset "$KEYGRIP" < /tmp/.gpg_pass
+            echo "Passphrase pre-seeded in gpg-agent"
+          else
+            echo "::warning::Could not determine keygrip"
+          fi
+
+          echo ""
+          echo "=== Test 2: clearsign using cached agent passphrase ==="
+          echo "test payload 2" | gpg --batch --yes --clearsign && echo "PASS" || echo "FAIL"
+
+          rm -f /tmp/.gpg_pass
 
       - name: Configure git for GPG signing
         env:
           GPG_KEY_ID: ${{ secrets.CI_GPG_KEY_ID }}
         run: |
+          echo "=== Extract actual key ID from imported key ==="
+          IMPORTED_KEY_ID=$(gpg --list-secret-keys --keyid-format long 2>/dev/null \
+            | grep '^sec' | head -1 | sed 's/.*\/\([A-F0-9]*\).*/\1/')
+          echo "Imported key ID: $IMPORTED_KEY_ID"
+          echo "CI_GPG_KEY_ID secret: $GPG_KEY_ID"
+
+          if [ "$IMPORTED_KEY_ID" != "$GPG_KEY_ID" ]; then
+            echo "::warning::CI_GPG_KEY_ID does not match imported key! Using imported key ID instead."
+          fi
+
+          SIGNING_KEY="${IMPORTED_KEY_ID:-$GPG_KEY_ID}"
+          echo "Using signing key: $SIGNING_KEY"
+
           git config user.name "InditexTech CI"
           git config user.email "oso@inditex.com"
           git config commit.gpgsign true
           git config tag.gpgsign true
-          git config user.signingkey "$GPG_KEY_ID"
+          git config user.signingkey "$SIGNING_KEY"
           git config gpg.program gpg
 
-          echo "::group::Git GPG config"
+          echo ""
+          echo "Git GPG config:"
           git config --list | grep -E '(gpg|sign|user\.)'
-          echo "::endgroup::"
 
       - name: Test signed commit
         run: |
           echo "gpg-test-$(date +%s)" >> gpg-test-file.txt
           git add gpg-test-file.txt
-          git commit -m "test: GPG signed commit" \
-            -S --no-verify
-          echo "::group::Verify signed commit"
+          git commit -m "test: GPG signed commit" -S --no-verify
+
+          echo "=== Verify signed commit ==="
           git log --show-signature -1
-          echo "::endgroup::"
 
       - name: Test signed tag
         run: |
           git tag -s -m "test: GPG signed tag" gpg-test-tag-${{ github.run_number }}
-          echo "::group::Verify signed tag"
+
+          echo "=== Verify signed tag ==="
           git tag -v gpg-test-tag-${{ github.run_number }}
-          echo "::endgroup::"
 
       - name: Summary
         if: always()
