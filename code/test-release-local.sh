@@ -186,4 +186,3 @@ echo ""
 # Keep Verdaccio alive so you can browse the registry
 wait "$VERDACCIO_PID"
 
-
