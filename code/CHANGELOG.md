@@ -7,9 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-03-11
+
 ### Changed
 
 - Enable GPG signing for commits and tags in release workfl
+
 ## [3.1.0] - 2026-03-11
 
 ### Changed
@@ -42,7 +45,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release
 
-[Unreleased]: https://github.com/InditexTech/npm-release-testing/compare/3.1.0...HEAD
+[Unreleased]: https://github.com/InditexTech/npm-release-testing/compare/3.2.0...HEAD
+
+[3.2.0]: https://github.com/InditexTech/npm-release-testing/compare/3.1.0...3.2.0
 
 [3.1.0]: https://github.com/InditexTech/npm-release-testing/compare/3.0.0...3.1.0
 
