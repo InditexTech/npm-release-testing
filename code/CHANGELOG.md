@@ -7,11 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-
 ### Changed
 
-- Disable GPG commit signing in CI workflow
-- Improve release workflow reliability
+- Enable GPG signing for commits and tags in release workflow
 
 ## [3.0.0] - 2026-03-11
 
