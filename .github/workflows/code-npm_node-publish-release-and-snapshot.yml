@@ -335,6 +335,12 @@ jobs:
           echo "$SCM_COMMITTER_PGP_KEY" | gpg --batch --import
           FPR=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/ {print $10; exit}')
 
+          # Configure gpg-agent to allow loopback pinentry (avoids "Inappropriate ioctl for device")
+          mkdir -p ~/.gnupg
+          echo "allow-loopback-pinentry" >> ~/.gnupg/gpg-agent.conf
+          chmod 700 ~/.gnupg
+          gpgconf --reload gpg-agent
+
           # Export passphrase to GITHUB_ENV so it persists across steps
           echo "GPG_PASSPHRASE=$GPG_PASSPHRASE" >> "$GITHUB_ENV"
           
@@ -342,7 +348,7 @@ jobs:
           mkdir -p ~/.bin
           cat > ~/.bin/gpg-wrapper.sh <<'WRAPPER'
           #!/bin/bash
-          echo "$GPG_PASSPHRASE" | gpg --batch --passphrase-fd 0 "$@"
+          echo "$GPG_PASSPHRASE" | gpg --batch --passphrase-fd 0 --pinentry-mode loopback "$@"
           WRAPPER
           chmod +x ~/.bin/gpg-wrapper.sh
           
