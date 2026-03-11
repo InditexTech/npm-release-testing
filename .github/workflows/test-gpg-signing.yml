@@ -145,3 +145,9 @@ jobs:
 
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "**Note:** No push was performed. All changes are local to the runner." >> "$GITHUB_STEP_SUMMARY"
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "## GPG Public Key (add to org GPG keys)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          gpg --armor --export >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
