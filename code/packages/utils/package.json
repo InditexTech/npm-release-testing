@@ -25,7 +25,7 @@
     "version:release": "npm version $RELEASE_VERSION -m \"[npm-scripts] prepare release $RELEASE_VERSION\" --tag-version-prefix \"\""
   },
   "dependencies": {
-    "@inditextech/release-test-core": "1.1.0-SNAPSHOT.5.1"
+    "@inditextech/release-test-core": "2.0.1"
   },
   "repository": {
     "url": "git+https://github.com/InditexTech/npm-release-testing.git"
