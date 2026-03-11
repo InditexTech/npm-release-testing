@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Use verified GPG committer email for signed commits and tags
+- Enable GPG signing for release commits and tags
 
 ## [3.2.0] - 2026-03-11
 
