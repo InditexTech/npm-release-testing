@@ -344,7 +344,7 @@ jobs:
           # Git: identity and signing
           FPR=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/ {print $10; exit}')
           git config user.name "InditexTech CI"
-          git config user.email "oso@inditex.com"
+          git config user.email "itxtechsec@inditex.com"
           git config user.signingkey "$FPR"
           git config commit.gpgsign true
           git config tag.gpgsign true
