@@ -85,13 +85,27 @@ jobs:
         env:
           GPG_KEY_ID: ${{ secrets.CI_GPG_KEY_ID }}
         run: |
+          echo "=== Extract actual key ID from imported key ==="
+          IMPORTED_KEY_ID=$(gpg --list-secret-keys --keyid-format long 2>/dev/null \
+            | grep '^sec' | head -1 | sed 's/.*\/\([A-F0-9]*\).*/\1/')
+          echo "Imported key ID: $IMPORTED_KEY_ID"
+          echo "CI_GPG_KEY_ID secret: $GPG_KEY_ID"
+
+          if [ "$IMPORTED_KEY_ID" != "$GPG_KEY_ID" ]; then
+            echo "::warning::CI_GPG_KEY_ID does not match imported key! Using imported key ID instead."
+          fi
+
+          SIGNING_KEY="${IMPORTED_KEY_ID:-$GPG_KEY_ID}"
+          echo "Using signing key: $SIGNING_KEY"
+
           git config user.name "InditexTech CI"
           git config user.email "oso@inditex.com"
           git config commit.gpgsign true
           git config tag.gpgsign true
-          git config user.signingkey "$GPG_KEY_ID"
+          git config user.signingkey "$SIGNING_KEY"
           git config gpg.program gpg
 
+          echo ""
           echo "Git GPG config:"
           git config --list | grep -E '(gpg|sign|user\.)'
 
