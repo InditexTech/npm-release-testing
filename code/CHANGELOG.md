@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.2] - 2026-03-11
+
+### Fixed
+
+- Update lock file to use npmjs.org registry
+
+## [2.0.1] - 2026-03-11
+
+### Fixed
+
+- Fix dependencies and versions
+
+## [2.0.0] - 2026-03-11
+
+### Changed
+
+- Major version bump
+
 ## [1.0.0] - 2025-01-01
 
 ### Added
