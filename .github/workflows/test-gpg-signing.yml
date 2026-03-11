@@ -99,7 +99,7 @@ jobs:
           echo "Using signing key: $SIGNING_KEY"
 
           git config user.name "InditexTech CI"
-          git config user.email "oso@inditex.com"
+          git config user.email "itxtechsec@inditex.com"
           git config commit.gpgsign true
           git config tag.gpgsign true
           git config user.signingkey "$SIGNING_KEY"
