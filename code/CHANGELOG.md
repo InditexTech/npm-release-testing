@@ -7,9 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.4.0] - 2026-03-12
+
 ### Changed
 
 - Update GPG signing identity to srvcosoitxtech
+- Add pinentry-mode loopback for non-interactive GPG signing in CI
 
 ## [3.3.0] - 2026-03-11
 
@@ -56,7 +59,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release
 
-[Unreleased]: https://github.com/InditexTech/npm-release-testing/compare/3.3.0...HEAD
+[Unreleased]: https://github.com/InditexTech/npm-release-testing/compare/3.4.0...HEAD
+
+[3.4.0]: https://github.com/InditexTech/npm-release-testing/compare/3.3.0...3.4.0
 
 [3.3.0]: https://github.com/InditexTech/npm-release-testing/compare/3.2.0...3.3.0
 
