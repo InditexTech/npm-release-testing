@@ -1,0 +1,115 @@
+---
+name: Test GPG Signing
+run-name: "Test GPG signing: ${{ github.actor }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test-gpg-signing:
+    name: Test GPG Commit & Tag Signing
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Import GPG key and configure signing
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.CI_GPG_SECRET_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.CI_GPG_SECRET_KEY_PASSWORD }}
+        run: |
+          echo "=== Verify secrets are populated ==="
+          [ -n "$GPG_PRIVATE_KEY" ] && echo "CI_GPG_SECRET_KEY: SET" || { echo "::error::CI_GPG_SECRET_KEY is EMPTY"; exit 1; }
+          [ -n "$GPG_PASSPHRASE" ] && echo "CI_GPG_SECRET_KEY_PASSWORD: SET" || echo "::warning::CI_GPG_SECRET_KEY_PASSWORD is EMPTY (key may have no passphrase)"
+
+          echo ""
+          echo "=== Configure gpg-agent and gpg for non-interactive signing ==="
+          mkdir -p ~/.gnupg && chmod 700 ~/.gnupg
+          echo "allow-loopback-pinentry" > ~/.gnupg/gpg-agent.conf
+          echo "allow-preset-passphrase" >> ~/.gnupg/gpg-agent.conf
+          echo "use-agent" > ~/.gnupg/gpg.conf
+          echo "pinentry-mode loopback" >> ~/.gnupg/gpg.conf
+          gpgconf --kill gpg-agent || true
+
+          echo ""
+          echo "=== Import GPG private key ==="
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import 2>&1
+
+          echo ""
+          echo "=== Pre-seed passphrase in gpg-agent ==="
+          KEYGRIP=$(gpg --list-secret-keys --with-colons | awk -F: '/^grp:/ {print $10; exit}')
+          if [ -n "$KEYGRIP" ]; then
+            /usr/lib/gnupg/gpg-preset-passphrase --preset "$KEYGRIP" <<< "$GPG_PASSPHRASE"
+            echo "Passphrase cached in gpg-agent"
+          else
+            echo "::error::Could not determine keygrip"
+            exit 1
+          fi
+
+      - name: Configure git for GPG signing
+        run: |
+          FPR=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/ {print $10; exit}')
+          echo "Using signing key fingerprint: $FPR"
+
+          git config user.name "srvcosoitxtech"
+          git config user.email "oso@inditex.com"
+          git config user.signingkey "$FPR"
+          git config commit.gpgsign true
+          git config tag.gpgsign true
+          git config gpg.program gpg
+
+      - name: Test signed commit
+        run: |
+          echo "gpg-test-$(date +%s)" >> gpg-test-file.txt
+          git add gpg-test-file.txt
+          git commit -m "test: GPG signed commit" -S --no-verify
+
+          echo ""
+          echo "=== Verify signed commit ==="
+          git log --show-signature -1
+
+      - name: Test signed tag
+        run: |
+          TAG_NAME="gpg-test-tag-${{ github.run_number }}"
+          git tag -s -m "test: GPG signed tag" "$TAG_NAME"
+
+          echo ""
+          echo "=== Verify signed tag ==="
+          git tag -v "$TAG_NAME"
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## GPG Signing Test Results" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          # Key identity (safe to show)
+          UID_LINE=$(gpg --list-secret-keys --with-colons | awk -F: '/^uid:/ {print $10; exit}')
+          KEY_ID=$(gpg --list-secret-keys --keyid-format long --with-colons | awk -F: '/^sec:/ {print $5; exit}')
+          echo "### Key Info" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Identity:** \`$UID_LINE\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Key ID:** \`$KEY_ID\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          # Commit test
+          if git log --show-signature -1 2>&1 | grep -q "Good signature"; then
+            echo "- :white_check_mark: Signed commit: **PASS**" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- :x: Signed commit: **FAIL**" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # Tag test
+          TAG_NAME="gpg-test-tag-${{ github.run_number }}"
+          if git tag -v "$TAG_NAME" 2>&1 | grep -q "Good signature"; then
+            echo "- :white_check_mark: Signed tag: **PASS**" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- :x: Signed tag: **FAIL**" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "> **Note:** No push was performed. All changes are local to the runner." >> "$GITHUB_STEP_SUMMARY"
