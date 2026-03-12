@@ -332,10 +332,12 @@ jobs:
           https://ci-user:$GITHUB_TOKEN@github.com
           EOT
 
-          # GPG: configure agent, import key, cache passphrase
+          # GPG: configure agent and gpg for non-interactive signing
           mkdir -p ~/.gnupg && chmod 700 ~/.gnupg
           echo "allow-loopback-pinentry" > ~/.gnupg/gpg-agent.conf
           echo "allow-preset-passphrase" >> ~/.gnupg/gpg-agent.conf
+          echo "use-agent" > ~/.gnupg/gpg.conf
+          echo "pinentry-mode loopback" >> ~/.gnupg/gpg.conf
           gpgconf --kill gpg-agent || true
           echo "$GPG_PRIVATE_KEY" | gpg --batch --import
           KEYGRIP=$(gpg --list-secret-keys --with-colons | awk -F: '/^grp:/ {print $10; exit}')
