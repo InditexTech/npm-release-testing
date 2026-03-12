@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Pre-seed GPG passphrase for all keygrips (primary + subkeys)
+
 ## [3.4.0] - 2026-03-12
 
 ### Changed
