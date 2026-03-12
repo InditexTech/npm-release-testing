@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.5.0] - 2026-03-12
+
 ### Changed
 
 - Pre-seed GPG passphrase for all keygrips (primary + subkeys)
@@ -63,7 +65,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release
 
-[Unreleased]: https://github.com/InditexTech/npm-release-testing/compare/3.4.0...HEAD
+[Unreleased]: https://github.com/InditexTech/npm-release-testing/compare/3.5.0...HEAD
+
+[3.5.0]: https://github.com/InditexTech/npm-release-testing/compare/3.4.0...3.5.0
 
 [3.4.0]: https://github.com/InditexTech/npm-release-testing/compare/3.3.0...3.4.0
 
