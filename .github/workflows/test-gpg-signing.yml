@@ -41,15 +41,16 @@ jobs:
           echo "$GPG_PRIVATE_KEY" | gpg --batch --import
 
           echo ""
-          echo "=== Pre-seed passphrase in gpg-agent ==="
-          KEYGRIP=$(gpg --list-secret-keys --with-colons | awk -F: '/^grp:/ {print $10; exit}')
-          if [ -n "$KEYGRIP" ]; then
-            /usr/lib/gnupg/gpg-preset-passphrase --preset "$KEYGRIP" <<< "$GPG_PASSPHRASE"
-            echo "Passphrase cached in gpg-agent"
-          else
-            echo "::error::Could not determine keygrip"
+          echo "=== Pre-seed passphrase in gpg-agent for all keygrips ==="
+          GRIPS=$(gpg --list-secret-keys --with-colons | awk -F: '/^grp:/ {print $10}')
+          if [ -z "$GRIPS" ]; then
+            echo "::error::Could not determine any keygrip"
             exit 1
           fi
+          echo "$GRIPS" | while read -r GRIP; do
+            /usr/lib/gnupg/gpg-preset-passphrase --preset "$GRIP" <<< "$GPG_PASSPHRASE"
+          done
+          echo "Passphrase cached for all keygrips"
 
       - name: Configure git for GPG signing
         run: |
