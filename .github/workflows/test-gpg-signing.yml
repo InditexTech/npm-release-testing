@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   test-gpg-signing:
@@ -62,24 +62,24 @@ jobs:
           git config commit.gpgsign true
           git config tag.gpgsign true
 
-      - name: Test signed commit
+      - name: Create signed commit and verify
         run: |
           echo "gpg-test-$(date +%s)" >> gpg-test-file.txt
           git add gpg-test-file.txt
           git commit -m "test: GPG signed commit" -S --no-verify
 
           echo ""
-          echo "=== Verify signed commit ==="
-          git log --show-signature -1
+          echo "=== Verify commit signature ==="
+          git verify-commit HEAD
 
-      - name: Test signed tag
+      - name: Create signed tag and verify
         run: |
           TAG_NAME="gpg-test-tag-${{ github.run_number }}"
           git tag -s -m "test: GPG signed tag" "$TAG_NAME"
 
           echo ""
-          echo "=== Verify signed tag ==="
-          git tag -v "$TAG_NAME"
+          echo "=== Verify tag signature ==="
+          git verify-tag "$TAG_NAME"
 
       - name: Summary
         if: always()
@@ -87,7 +87,6 @@ jobs:
           echo "## GPG Signing Test Results" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
-          # Key identity (safe to show)
           UID_LINE=$(gpg --list-secret-keys --with-colons | awk -F: '/^uid:/ {print $10; exit}')
           KEY_ID=$(gpg --list-secret-keys --keyid-format long --with-colons | awk -F: '/^sec:/ {print $5; exit}')
           echo "### Key Info" >> "$GITHUB_STEP_SUMMARY"
@@ -95,20 +94,18 @@ jobs:
           echo "- **Key ID:** \`$KEY_ID\`" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
-          # Commit test
-          if git log --show-signature -1 2>&1 | grep -q "Good signature"; then
-            echo "- :white_check_mark: Signed commit: **PASS**" >> "$GITHUB_STEP_SUMMARY"
+          if git verify-commit HEAD 2>/dev/null; then
+            echo "- :white_check_mark: Verified commit: **PASS**" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "- :x: Signed commit: **FAIL**" >> "$GITHUB_STEP_SUMMARY"
+            echo "- :x: Verified commit: **FAIL**" >> "$GITHUB_STEP_SUMMARY"
           fi
 
-          # Tag test
           TAG_NAME="gpg-test-tag-${{ github.run_number }}"
-          if git tag -v "$TAG_NAME" 2>&1 | grep -q "Good signature"; then
-            echo "- :white_check_mark: Signed tag: **PASS**" >> "$GITHUB_STEP_SUMMARY"
+          if git verify-tag "$TAG_NAME" 2>/dev/null; then
+            echo "- :white_check_mark: Verified tag: **PASS**" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "- :x: Signed tag: **FAIL**" >> "$GITHUB_STEP_SUMMARY"
+            echo "- :x: Verified tag: **FAIL**" >> "$GITHUB_STEP_SUMMARY"
           fi
 
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "> **Note:** No push was performed. All changes are local to the runner." >> "$GITHUB_STEP_SUMMARY"
+          echo "> No push was performed. All changes are local to the runner." >> "$GITHUB_STEP_SUMMARY"
