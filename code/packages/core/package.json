@@ -1,6 +1,6 @@
 {
   "name": "@inditextech/release-test-core",
-  "version": "3.6.0",
+  "version": "3.7.0-SNAPSHOT",
   "description": "Core package for release workflow testing",
   "type": "module",
   "license": "Apache-2.0",
