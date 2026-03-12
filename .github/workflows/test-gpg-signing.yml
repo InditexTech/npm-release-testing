@@ -82,6 +82,24 @@ jobs:
           echo "=== Verify tag signature ==="
           git verify-tag "$TAG_NAME"
 
+      - name: Verify GPG key is uploaded to GitHub
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          KEY_ID=$(gpg --list-secret-keys --keyid-format long --with-colons | awk -F: '/^sec:/ {print $5; exit}')
+          COMMITTER_USER="srvcosoitxtech"
+
+          echo "=== Checking if key $KEY_ID is registered on GitHub user $COMMITTER_USER ==="
+          GITHUB_KEYS=$(gh api "/users/$COMMITTER_USER/gpg_keys" --jq '.[].key_id')
+
+          if echo "$GITHUB_KEYS" | grep -q "$KEY_ID"; then
+            echo "Key $KEY_ID found on GitHub user $COMMITTER_USER"
+          else
+            echo "::error::Key $KEY_ID NOT found on GitHub user $COMMITTER_USER. Commits will appear as Unverified."
+            echo "Available keys on $COMMITTER_USER: $GITHUB_KEYS"
+            exit 1
+          fi
+
       - name: Summary
         if: always()
         run: |
@@ -106,6 +124,14 @@ jobs:
             echo "- :white_check_mark: Verified tag: **PASS**" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "- :x: Verified tag: **FAIL**" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          COMMITTER_USER="srvcosoitxtech"
+          GITHUB_KEYS=$(gh api "/users/$COMMITTER_USER/gpg_keys" --jq '.[].key_id' 2>/dev/null || echo "")
+          if echo "$GITHUB_KEYS" | grep -q "$KEY_ID"; then
+            echo "- :white_check_mark: GPG key on GitHub ($COMMITTER_USER): **PASS**" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- :x: GPG key on GitHub ($COMMITTER_USER): **NOT FOUND**" >> "$GITHUB_STEP_SUMMARY"
           fi
 
           echo "" >> "$GITHUB_STEP_SUMMARY"
