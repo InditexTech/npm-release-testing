@@ -38,7 +38,7 @@ jobs:
 
           echo ""
           echo "=== Import GPG private key ==="
-          echo "$GPG_PRIVATE_KEY" | gpg --batch --import 2>&1
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
 
           echo ""
           echo "=== Pre-seed passphrase in gpg-agent ==="
@@ -61,7 +61,6 @@ jobs:
           git config user.signingkey "$FPR"
           git config commit.gpgsign true
           git config tag.gpgsign true
-          git config gpg.program gpg
 
       - name: Test signed commit
         run: |
