@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.6.0] - 2026-03-12
+
 ### Changed
 
 - chore: validate refined workflow
@@ -69,7 +71,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release
 
-[Unreleased]: https://github.com/InditexTech/npm-release-testing/compare/3.5.0...HEAD
+[Unreleased]: https://github.com/InditexTech/npm-release-testing/compare/3.6.0...HEAD
+
+[3.6.0]: https://github.com/InditexTech/npm-release-testing/compare/3.5.0...3.6.0
 
 [3.5.0]: https://github.com/InditexTech/npm-release-testing/compare/3.4.0...3.5.0
 
